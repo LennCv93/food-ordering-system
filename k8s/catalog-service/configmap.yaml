@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog-service-config
+  namespace: food-ordering
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: catalog_db
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
