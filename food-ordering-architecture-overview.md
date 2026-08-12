@@ -301,7 +301,7 @@ Cada microservicio se empaqueta en una imagen Docker liviana (solo runtime, `ecl
 
 ### 11.2 Kubernetes
 
-Cada microservicio se despliega como un `Deployment` independiente con su propio `Service` (sin capa de ruteo compartida), `ConfigMap`/`Secret` para configuración y credenciales, y *probes* de salud sobre `/actuator/health`. La infraestructura compartida (PostgreSQL, Kafka, Prometheus, Grafana, Zipkin) se despliega igualmente dentro del mismo namespace (`food-ordering`).
+Cada microservicio se despliega como un `Deployment` independiente con su propio `Service` (sin capa de ruteo compartida), `ConfigMap`/`Secret` para configuración y credenciales, y *probes* de salud sobre los health groups de Actuator (`/actuator/health/readiness`, `/actuator/health/liveness`). La infraestructura compartida (PostgreSQL, Kafka, Prometheus, Grafana, Zipkin) se despliega igualmente dentro del mismo namespace (`food-ordering`).
 
 ---
 
@@ -314,4 +314,5 @@ Cada microservicio se despliega como un `Deployment` independiente con su propio
 | JWT con secreto compartido (HS256) | Propagación simple entre servicios sin gestión de claves públicas |
 | Kafka en modo KRaft, broker único | Reduce componentes de infraestructura en un proyecto académico |
 | `GET /deliveries/order/{orderId}` sin ownership check (solo por rol) | `delivery-service` no almacena el `userId` del pedido; se prioriza simplicidad sobre restricción de propiedad para este único endpoint de lectura |
+| `spring.kafka.template/listener.observation-enabled: true` en order/payment/delivery-service | Sin esto (no viene activado por defecto en Spring Boot 3.x), el contexto de traza no se propaga en los headers del mensaje y cada consumidor Kafka inicia un trace nuevo y desconectado, rompiendo la trazabilidad end-to-end prometida en la sección 10 |
 | Coreografía de eventos (sin orquestador) | El flujo es lineal y simple (pago → entrega) |
