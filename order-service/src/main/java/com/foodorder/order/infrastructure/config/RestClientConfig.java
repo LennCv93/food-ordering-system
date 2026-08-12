@@ -9,7 +9,8 @@ import org.springframework.web.client.RestClient;
 public class RestClientConfig {
 
     @Bean
-    public RestClient catalogRestClient(@Value("${catalog-service.base-url}") String baseUrl) {
-        return RestClient.builder().baseUrl(baseUrl).build();
+    public RestClient catalogRestClient(RestClient.Builder restClientBuilder,
+                                         @Value("${catalog-service.base-url}") String baseUrl) {
+        return restClientBuilder.baseUrl(baseUrl).build();
     }
 }
