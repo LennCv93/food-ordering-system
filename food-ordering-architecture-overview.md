@@ -168,8 +168,10 @@ CREATED/PENDING_PAYMENT → CANCELLED
 
 | Método | Endpoint | Rol requerido | Descripción |
 |---|---|---|---|
-| GET | `/api/v1/deliveries/order/{orderId}` | USER (dueño), ADMIN | Obtiene la entrega asociada a un pedido |
+| GET | `/api/v1/deliveries/order/{orderId}` | USER, ADMIN | Obtiene la entrega asociada a un pedido |
 | PATCH | `/api/v1/deliveries/{id}/status` | ADMIN | Actualiza el estado (simula avance del repartidor) |
+
+> A diferencia de `order-service` y `payment-service`, `GET /api/v1/deliveries/order/{orderId}` **no** valida propiedad del recurso: cualquier usuario autenticado con rol `USER` o `ADMIN` puede consultar la entrega de cualquier pedido, no solo las propias. Es una decisión deliberada de simplicidad: `delivery-service` no almacena el `userId` del pedido (solo `order_id`, `delivery_address`, `status`, `courier_name`), evitando así propagar y persistir ese dato solo para este chequeo. La restricción sigue aplicando por rol.
 
 **Modelo de datos — `deliveries`:** `id`, `order_id`, `delivery_address`, `status` (`ASSIGNED`/`IN_TRANSIT`/`DELIVERED`/`FAILED`), `courier_name`, `created_at`, `updated_at`.
 
@@ -206,7 +208,7 @@ Cada consumidor usa su propio `group.id` y valida idempotencia antes de procesar
 - `user-service` es el único emisor de JWT (HS256, secreto compartido `JWT_SECRET`), con claims `sub` (userId), `email`, `role`, `iat`, `exp`.
 - El cliente envía el token en `Authorization: Bearer <jwt>` a cualquier servicio. `order-service` propaga ese mismo header al llamar a `catalog-service`.
 - Cada servicio valida el JWT **localmente** (firma + expiración) usando el secreto compartido — no hay llamadas de red para validar tokens.
-- Autorización por rol (`ADMIN` / `USER`) aplicada por endpoint; para recursos propios (pedidos, pagos, entregas), se valida además que el `userId` del recurso coincida con el `sub` del token.
+- Autorización por rol (`ADMIN` / `USER`) aplicada por endpoint; para recursos propios de `order-service` y `payment-service` (pedidos, pagos), se valida además que el `userId` del recurso coincida con el `sub` del token. `delivery-service` es la excepción: solo restringe por rol (ver nota en 4.5).
 
 ---
 
@@ -311,4 +313,5 @@ Cada microservicio se despliega como un `Deployment` independiente con su propio
 | Pago manual simulado (vs. automático) | Permite simular escenarios de éxito/fallo controlados por el propio cliente |
 | JWT con secreto compartido (HS256) | Propagación simple entre servicios sin gestión de claves públicas |
 | Kafka en modo KRaft, broker único | Reduce componentes de infraestructura en un proyecto académico |
+| `GET /deliveries/order/{orderId}` sin ownership check (solo por rol) | `delivery-service` no almacena el `userId` del pedido; se prioriza simplicidad sobre restricción de propiedad para este único endpoint de lectura |
 | Coreografía de eventos (sin orquestador) | El flujo es lineal y simple (pago → entrega) |
