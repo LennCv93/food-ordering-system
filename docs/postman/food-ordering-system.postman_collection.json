@@ -1,0 +1,629 @@
+{
+  "info": {
+    "name": "Food Ordering System",
+    "description": "Colección end-to-end del sistema de pedidos de comida. Las carpetas están ordenadas siguiendo el flujo real de un pedido: Auth -> Users -> Catalog -> Orders -> Payments -> Deliveries. Cada request que produce un dato necesario para las siguientes (tokens, ids) lo guarda automáticamente en variables de colección mediante scripts de Test, por lo que toda la colección puede correrse de punta a punta con el Collection Runner sin editar nada a mano.\n\nUsuario admin sembrado: admin@foodorder.com / Admin123!",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "userServiceUrl", "value": "http://localhost:8081" },
+    { "key": "catalogServiceUrl", "value": "http://localhost:8082" },
+    { "key": "orderServiceUrl", "value": "http://localhost:8083" },
+    { "key": "paymentServiceUrl", "value": "http://localhost:8084" },
+    { "key": "deliveryServiceUrl", "value": "http://localhost:8085" },
+    { "key": "userEmail", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "userToken", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "cancelOrderId", "value": "" },
+    { "key": "paymentId", "value": "" },
+    { "key": "deliveryId", "value": "" },
+    { "key": "payRetryCount", "value": "0" }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('userEmail', 'user.' + Date.now() + '@foodorder.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('role is USER', () => pm.expect(json.role).to.eql('USER'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Flow\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"Test123!\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/auth/register",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Registra un usuario nuevo con rol USER. El email se genera dinámicamente (pre-request script) para poder correr la colección varias veces sin chocar con el uniq constraint de email."
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('adminToken', json.token);",
+                  "pm.test('token present', () => pm.expect(json.token).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@foodorder.com\",\n  \"password\": \"Admin123!\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login con el usuario ADMIN sembrado (V2__seed_admin_user.sql). Guarda el JWT en {{adminToken}}."
+          }
+        },
+        {
+          "name": "Login (User)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('userToken', json.token);",
+                  "pm.test('token present', () => pm.expect(json.token).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"Test123!\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login con el usuario recién registrado. Guarda el JWT en {{userToken}}, usado por el resto del flujo (crear pedido, pagar, etc.)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Users",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/users/me",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            },
+            "description": "Perfil del usuario autenticado (USER o ADMIN)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "List Users (Admin)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/users",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "users"]
+            },
+            "description": "Solo ADMIN. Lista todos los usuarios registrados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Get User By Id (Admin)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/v1/users/1",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "v1", "users", "1"]
+            },
+            "description": "Solo ADMIN. El usuario id=1 es el admin sembrado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Catalog",
+      "item": [
+        {
+          "name": "Create Product (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('productId', json.id);",
+                  "pm.test('product is available', () => pm.expect(json.available).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lomo Saltado\",\n  \"description\": \"Con papas y arroz\",\n  \"price\": 28.00,\n  \"category\": \"MAIN\",\n  \"stockQuantity\": 20\n}"
+            },
+            "url": {
+              "raw": "{{catalogServiceUrl}}/api/v1/products",
+              "host": ["{{catalogServiceUrl}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "Solo ADMIN. Guarda el id creado en {{productId}}, usado por Orders."
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{catalogServiceUrl}}/api/v1/products",
+              "host": ["{{catalogServiceUrl}}"],
+              "path": ["api", "v1", "products"]
+            },
+            "description": "USER o ADMIN. Soporta query params opcionales ?category= y ?available=."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Get Product By Id",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{catalogServiceUrl}}/api/v1/products/{{productId}}",
+              "host": ["{{catalogServiceUrl}}"],
+              "path": ["api", "v1", "products", "{{productId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Update Product (Admin)",
+          "request": {
+            "method": "PUT",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lomo Saltado\",\n  \"description\": \"Con papas y arroz (porción grande)\",\n  \"price\": 30.00,\n  \"category\": \"MAIN\",\n  \"available\": true,\n  \"stockQuantity\": 15\n}"
+            },
+            "url": {
+              "raw": "{{catalogServiceUrl}}/api/v1/products/{{productId}}",
+              "host": ["{{catalogServiceUrl}}"],
+              "path": ["api", "v1", "products", "{{productId}}"]
+            },
+            "description": "Solo ADMIN. Reemplazo completo del producto."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('orderId', json.id);",
+                  "pm.test('order is PENDING_PAYMENT', () => pm.expect(json.status).to.eql('PENDING_PAYMENT'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deliveryAddress\": \"Av. Postman 123\",\n  \"items\": [\n    { \"productId\": {{productId}}, \"quantity\": 1 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders"]
+            },
+            "description": "USER. Valida el producto contra catalog-service (síncrono, con Retry + Circuit Breaker) y publica order.created. Guarda el id en {{orderId}}, usado por el resto del flujo (pago y entrega)."
+          }
+        },
+        {
+          "name": "Get Order By Id",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders/{{orderId}}",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders", "{{orderId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders"]
+            },
+            "description": "USER ve solo sus pedidos; ADMIN ve todos (probar también con {{adminToken}})."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Create Order For Cancellation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('cancelOrderId', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deliveryAddress\": \"Av. Postman Cancel Test 456\",\n  \"items\": [\n    { \"productId\": {{productId}}, \"quantity\": 1 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders"]
+            },
+            "description": "Pedido dedicado a demostrar la cancelación, separado de {{orderId}} para no romper el flujo de pago/entrega que sigue después."
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders/{{cancelOrderId}}/cancel",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders", "{{cancelOrderId}}", "cancel"]
+            },
+            "description": "Cancela el pedido creado en el paso anterior (aún no pagado, así que la cancelación es válida). Sobre un pedido ya PAID esto respondería 409."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('order is CANCELLED', () => pm.expect(json.status).to.eql('CANCELLED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Payments",
+      "item": [
+        {
+          "name": "Get Payment By Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('paymentId', json.id);",
+                  "pm.test('payment is PENDING', () => pm.expect(json.status).to.eql('PENDING'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{paymentServiceUrl}}/api/v1/payments/order/{{orderId}}",
+              "host": ["{{paymentServiceUrl}}"],
+              "path": ["api", "v1", "payments", "order", "{{orderId}}"]
+            },
+            "description": "El pago se crea automáticamente en PENDING al consumir order.created (puede tardar uno o dos segundos tras crear el pedido)."
+          }
+        },
+        {
+          "name": "Pay Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('payment resolved to APPROVED or REJECTED', () => pm.expect(json.status).to.be.oneOf(['APPROVED', 'REJECTED']));",
+                  "",
+                  "const maxRetries = 5;",
+                  "let attempts = parseInt(pm.collectionVariables.get('payRetryCount') || '0');",
+                  "",
+                  "if (json.status === 'REJECTED' && attempts < maxRetries) {",
+                  "  attempts += 1;",
+                  "  pm.collectionVariables.set('payRetryCount', String(attempts));",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('orderServiceUrl') + '/api/v1/orders',",
+                  "    method: 'POST',",
+                  "    header: {",
+                  "      'Content-Type': 'application/json',",
+                  "      'Authorization': 'Bearer ' + pm.collectionVariables.get('userToken')",
+                  "    },",
+                  "    body: {",
+                  "      mode: 'raw',",
+                  "      raw: JSON.stringify({",
+                  "        deliveryAddress: 'Av. Postman Retry Flow',",
+                  "        items: [{ productId: parseInt(pm.collectionVariables.get('productId')), quantity: 1 }]",
+                  "      })",
+                  "    }",
+                  "  }, function (err, response) {",
+                  "    const order = response.json();",
+                  "    pm.collectionVariables.set('orderId', order.id);",
+                  "    pm.execution.setNextRequest('Pay Order');",
+                  "  });",
+                  "} else {",
+                  "  pm.collectionVariables.set('payRetryCount', '0');",
+                  "  pm.collectionVariables.set('paymentId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"CREDIT_CARD\"\n}"
+            },
+            "url": {
+              "raw": "{{paymentServiceUrl}}/api/v1/payments/order/{{orderId}}/pay",
+              "host": ["{{paymentServiceUrl}}"],
+              "path": ["api", "v1", "payments", "order", "{{orderId}}", "pay"]
+            },
+            "description": "Simula el pago (resultado aleatorio, ~80% APRROVED por defecto). Si sale REJECTED, el script de test crea un pedido nuevo automáticamente y reintenta este mismo request (hasta 5 veces) para que el flujo llegue a Deliveries con un pago aprobado."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Deliveries",
+      "item": [
+        {
+          "name": "Get Delivery By Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('deliveryId', json.id);",
+                  "pm.test('delivery is ASSIGNED', () => pm.expect(json.status).to.eql('ASSIGNED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{deliveryServiceUrl}}/api/v1/deliveries/order/{{orderId}}",
+              "host": ["{{deliveryServiceUrl}}"],
+              "path": ["api", "v1", "deliveries", "order", "{{orderId}}"]
+            },
+            "description": "Se crea automáticamente en ASSIGNED al consumir payment.completed. Nota: a diferencia de Orders/Payments, este endpoint no restringe por dueño del pedido, solo por rol (USER o ADMIN) — ver food-ordering-architecture-overview.md, sección 4.5."
+          }
+        },
+        {
+          "name": "Update Delivery Status (Admin) - IN_TRANSIT",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_TRANSIT\"\n}" },
+            "url": {
+              "raw": "{{deliveryServiceUrl}}/api/v1/deliveries/{{deliveryId}}/status",
+              "host": ["{{deliveryServiceUrl}}"],
+              "path": ["api", "v1", "deliveries", "{{deliveryId}}", "status"]
+            },
+            "description": "Solo ADMIN. Simula que el repartidor recogió el pedido. order-service reflejará esto como IN_DELIVERY."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('delivery is IN_TRANSIT', () => pm.expect(json.status).to.eql('IN_TRANSIT'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Delivery Status (Admin) - DELIVERED",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"DELIVERED\"\n}" },
+            "url": {
+              "raw": "{{deliveryServiceUrl}}/api/v1/deliveries/{{deliveryId}}/status",
+              "host": ["{{deliveryServiceUrl}}"],
+              "path": ["api", "v1", "deliveries", "{{deliveryId}}", "status"]
+            },
+            "description": "Solo ADMIN. Cierra el flujo end-to-end. order-service reflejará esto como DELIVERED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('delivery is DELIVERED', () => pm.expect(json.status).to.eql('DELIVERED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order By Id (final state)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+            "url": {
+              "raw": "{{orderServiceUrl}}/api/v1/orders/{{orderId}}",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["api", "v1", "orders", "{{orderId}}"]
+            },
+            "description": "Confirma el cierre del flujo end-to-end: el pedido debe reflejar status DELIVERED tras los eventos de order.created -> payment.completed -> delivery.status-changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('order is DELIVERED', () => pm.expect(json.status).to.eql('DELIVERED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
